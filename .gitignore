@@ -218,3 +218,11 @@ __marimo__/
 .streamlit/secrets.toml
 
 .env
+
+morpho-blue-liquidation-bot
+
+# Foundry
+cache/
+out/
+
+AGENTS.md

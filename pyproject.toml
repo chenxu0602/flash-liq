@@ -1,7 +1,7 @@
 [project]
 name = "flash-liq"
 version = "0.1.0"
-description = "Add your description here"
+description = "Liquidation research tools for Morpho and flash-loan workflows"
 readme = "README.md"
 authors = [
     { name = "chenxu", email = "chen.xu.wq@gmail.com" }
@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 dependencies = []
 
 [project.scripts]
-flash-liq = "flash_liq:main"
+flash-liq = "flash_liq.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]

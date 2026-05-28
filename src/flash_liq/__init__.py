@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from flash-liq!")
+"""Flash liquidation research tooling."""
+
+__all__ = []
