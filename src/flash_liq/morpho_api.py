@@ -139,6 +139,47 @@ query ScanMarketPositions(
 }
 """
 
+MARKETS_QUERY = """
+query FetchMarkets(
+  $chainId: Int!
+  $first: Int!
+  $marketIds: [String!]
+) {
+  markets(
+    first: $first
+    where: {
+      chainId_in: [$chainId]
+      uniqueKey_in: $marketIds
+    }
+  ) {
+    items {
+      marketId
+      lltv
+      loanAsset {
+        address
+        symbol
+        decimals
+        tags
+      }
+      collateralAsset {
+        address
+        symbol
+        decimals
+        tags
+        isListed
+      }
+      oracle {
+        address
+      }
+      warnings {
+        level
+        type
+      }
+    }
+  }
+}
+"""
+
 
 def fetch_market_positions(
     client: MorphoApiClient,
@@ -170,3 +211,23 @@ def fetch_market_positions(
         count=page_info.get("count"),
         count_total=page_info.get("countTotal"),
     )
+
+
+def fetch_markets_by_ids(
+    client: MorphoApiClient,
+    *,
+    chain_id: int,
+    market_ids: list[str],
+) -> list[dict[str, Any]]:
+    if not market_ids:
+        return []
+
+    data = client.request(
+        MARKETS_QUERY,
+        {
+            "chainId": chain_id,
+            "first": len(market_ids),
+            "marketIds": market_ids,
+        },
+    )
+    return list((data.get("markets") or {}).get("items") or [])

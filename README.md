@@ -62,6 +62,61 @@ uv run flash-liq scan-morpho --chain-id 1 --max-health-factor 1.05 --complex-onl
 uv run flash-liq scan-morpho --chain-id 1 --max-health-factor 1.05 --complex-only --output csv
 ```
 
+Rank currently liquidatable candidates by rough gross liquidation upside:
+
+```bash
+uv run flash-liq rank-morpho --chain-id 1 --max-health-factor 1 --limit 20
+uv run flash-liq rank-morpho --chain-id 1 --max-health-factor 1 --complex-only --min-gross-profit-usd 100
+uv run flash-liq rank-morpho --chain-id 1 --max-health-factor 1.25 --collateral-symbol PT- --limit 50
+```
+
+`rank-morpho` uses Morpho API `borrowAssetsUsd`, `collateralUsd`, and LLTV to estimate the
+standard Morpho Blue liquidation incentive. It is a gross candidate ranking only: it does not
+subtract gas, slippage, funding cost, collateral unwind loss, or MEV competition, and it cannot
+price rows where the API omits collateral USD values unless `--include-unpriced` is used.
+
+Check whether a borrower has authorized a pre-liquidation contract without printing the RPC URL:
+
+```bash
+set -a; source .env; set +a
+uv run flash-liq check-morpho-auth \
+  --authorizer 0xBorrower \
+  --authorizee 0xPreLiquidationContract
+```
+
+This wraps Morpho `isAuthorized(authorizer, authorizee)` with stdlib JSON-RPC and intentionally
+sanitizes RPC connectivity errors so `.env` values are not written to terminal output.
+
+Find historical Morpho Blue liquidations for local fork replay:
+
+```bash
+set -a; source .env; set +a
+uv run flash-liq find-morpho-liquidations \
+  --from-block 22000000 \
+  --to-block latest \
+  --progress \
+  --limit 20
+```
+
+Focus historical replay samples on Pendle PT-style collateral:
+
+```bash
+uv run flash-liq find-morpho-liquidations \
+  --from-block 22000000 \
+  --to-block 23000000 \
+  --collateral-symbol PT- \
+  --limit 20
+```
+
+The command reads `Liquidate` events from Morpho Blue, returns the historical `market_id`,
+`borrower`, `repaid_shares`, `seized_assets`, and a `fork_block` equal to `block_number - 1`.
+Use the emitted `probe_env` values with `MorphoLiquidationProbe.t.sol` to check whether the
+historical liquidation path reaches callback on the pre-transaction fork state.
+The default `--chunk-size 10` works with Alchemy Free tier `eth_getLogs` limits; increase it only
+if your RPC provider allows wider log ranges.
+Symbol filters enrich each event through the Morpho API before filtering; keep block windows
+bounded unless your RPC provider can handle many small `eth_getLogs` requests.
+
 Table output keeps `user` and `market_id` untruncated so they can be copied into the fork probe.
 Use `--short` for a compact terminal view.
 
@@ -96,6 +151,14 @@ export MORPHO_BORROWER=0x...
 forge test --match-path test/MorphoLiquidationProbe.t.sol -vv
 ```
 
+For historical replay, also set the block immediately before the historical liquidation:
+
+```bash
+export MORPHO_FORK_BLOCK=22000000
+export MORPHO_REPAID_SHARES=123
+forge test --match-path test/MorphoLiquidationProbe.t.sol -vv
+```
+
 The probe calls Morpho `liquidate` with callback data.
 
 - If execution reaches `onMorphoLiquidate(uint256,bytes)`, the test passes. That means Morpho
@@ -117,6 +180,34 @@ underflow edges. You can override sizing:
 export MORPHO_SEIZED_ASSETS=123
 export MORPHO_REPAID_SHARES=0
 ```
+
+## Replay The Curve sDOLA LlamaLend Attack Mechanism
+
+This repo also includes a historical fork replay for the March 2, 2026 Curve sDOLA-long2
+LlamaLend incident. It is a mechanism replay, not a live execution path: the test directly funds
+the probe contract on the fork and does not reproduce the Morpho flash loan or swap routing.
+
+Print the replay constants:
+
+```bash
+uv run flash-liq curve-sdola-replay-env
+uv run flash-liq curve-sdola-replay-env --output json
+```
+
+Run the Level 1 and Level 2 replay tests at the pre-attack block:
+
+```bash
+set -a; source .env; set +a
+forge test --match-path test/CurveSdolaLlamaLendAttackReplay.t.sol -vv
+```
+
+The replay covers:
+
+- Level 1: `DolaSavings.stake(amount, sDOLA)` increases `sDOLA.convertToAssets(1e18)` and the
+  LlamaLend oracle price in the same fork transaction.
+- Level 2: a large LLAMMA `exchange()` pushes borrowers into soft liquidation, redeeming acquired
+  sDOLA reduces share supply, the DOLA donation raises PPS, and at least one affected borrower
+  becomes hard-liquidatable through `Controller.liquidate(user, 0)`.
 
 ## Why This Shape
 
@@ -143,7 +234,7 @@ whether candidates still work against current chain state.
 ## Development Checks
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run pytest
 forge build
 ```
 

@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 interface Vm {
     function createSelectFork(string calldata url) external returns (uint256);
+    function createSelectFork(string calldata url, uint256 blockNumber) external returns (uint256);
     function envAddress(string calldata name) external returns (address);
     function envBytes32(string calldata name) external returns (bytes32);
     function envOr(string calldata name, uint256 defaultValue) external returns (uint256);
@@ -47,7 +48,12 @@ contract MorphoLiquidationProbeTest {
     error EmptyPosition(bytes32 marketId, address borrower);
 
     function test_morpho_liquidation_reaches_callback() external {
-        vm.createSelectFork("mainnet");
+        uint256 forkBlock = vm.envOr("MORPHO_FORK_BLOCK", uint256(0));
+        if (forkBlock == 0) {
+            vm.createSelectFork("mainnet");
+        } else {
+            vm.createSelectFork("mainnet", forkBlock);
+        }
 
         bytes32 marketId = vm.envBytes32("MORPHO_MARKET_ID");
         address borrower = vm.envAddress("MORPHO_BORROWER");
